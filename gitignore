@@ -1,0 +1,10 @@
+# Private — never upload these
+.env
+job_agent.db
+logs/
+assets/
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
