@@ -282,7 +282,7 @@ If you have repetitive tasks or workflows that need automation, I can build a cu
 I specialize in Python automation for small businesses and VAs — application pipelines, document sorting, inbox management, reporting, and more.
 
 👉 **[Connect on LinkedIn](https://www.linkedin.com/in/jasper-john-paitan-11641337b)**
-📧 **jasperjohn.paitan@lsu.edu.ph**
+📧 **jasper.paitan0918@gmail.com**
 🏅 **[View Certifications](https://www.credly.com/users/jasper-john-paitan)**
 
 ---
