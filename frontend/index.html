@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Job AI Agent — Dashboard</title>
+<style>
+  :root {
+    --bg:       #0f1117;
+    --surface:  #1a1d27;
+    --card:     #21263a;
+    --border:   #2e3350;
+    --accent:   #4f8ef7;
+    --green:    #22c55e;
+    --yellow:   #f59e0b;
+    --red:      #ef4444;
+    --purple:   #a855f7;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --radius:   10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+
+  /* Layout */
+  .layout { display: flex; min-height: 100vh; }
+  .sidebar { width: 220px; background: var(--surface); border-right: 1px solid var(--border); padding: 20px 0; display: flex; flex-direction: column; position: fixed; height: 100vh; }
+  .main { margin-left: 220px; padding: 28px; flex: 1; }
+
+  /* Sidebar */
+  .brand { padding: 0 20px 20px; border-bottom: 1px solid var(--border); }
+  .brand h2 { font-size: 15px; font-weight: 700; color: var(--accent); }
+  .brand p  { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .nav { padding: 12px 0; flex: 1; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 20px; cursor: pointer; color: var(--muted); transition: all .15s; border-left: 3px solid transparent; font-size: 13px; }
+  .nav-item:hover { color: var(--text); background: rgba(79,142,247,.08); }
+  .nav-item.active { color: var(--accent); background: rgba(79,142,247,.12); border-left-color: var(--accent); }
+  .nav-item .icon { font-size: 16px; width: 20px; text-align: center; }
+  .badge { background: var(--red); color: #fff; border-radius: 999px; padding: 1px 7px; font-size: 10px; margin-left: auto; }
+
+  /* Tabs */
+  .tab { display: none; }
+  .tab.active { display: block; }
+  .page-title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .page-sub   { color: var(--muted); margin-bottom: 22px; font-size: 13px; }
+
+  /* Stat cards */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; margin-bottom: 26px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+  .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+  .stat-value { font-size: 28px; font-weight: 700; margin-top: 6px; }
+  .stat-card.green .stat-value  { color: var(--green); }
+  .stat-card.yellow .stat-value { color: var(--yellow); }
+  .stat-card.red .stat-value    { color: var(--red); }
+  .stat-card.purple .stat-value { color: var(--purple); }
+  .stat-card.blue .stat-value   { color: var(--accent); }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 7px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all .15s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #3d7de8; }
+  .btn-success { background: var(--green); color: #fff; }
+  .btn-success:hover { filter: brightness(.9); }
+  .btn-danger  { background: var(--red);   color: #fff; }
+  .btn-danger:hover  { filter: brightness(.9); }
+  .btn-ghost   { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--accent); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+  /* Table */
+  .table-wrap { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: var(--surface); padding: 11px 14px; text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,.03); }
+  td { padding: 11px 14px; vertical-align: middle; }
+
+  /* Pill badges */
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill-green  { background: rgba(34,197,94,.15);  color: var(--green); }
+  .pill-yellow { background: rgba(245,158,11,.15); color: var(--yellow); }
+  .pill-red    { background: rgba(239,68,68,.15);  color: var(--red); }
+  .pill-blue   { background: rgba(79,142,247,.15); color: var(--accent); }
+  .pill-purple { background: rgba(168,85,247,.15); color: var(--purple); }
+  .pill-gray   { background: rgba(100,116,139,.15); color: var(--muted); }
+
+  /* Toolbar */
+  .toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-select { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 7px 12px; border-radius: 7px; font-size: 13px; }
+  .search-input { background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 7px 12px; border-radius: 7px; font-size: 13px; width: 200px; }
+  .search-input:focus, .filter-select:focus { outline: none; border-color: var(--accent); }
+
+  /* Forms */
+  .form-group { margin-bottom: 16px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input, textarea, select { width: 100%; background: var(--card); border: 1px solid var(--border); color: var(--text); padding: 9px 12px; border-radius: 7px; font-size: 13px; font-family: inherit; }
+  input:focus, textarea:focus, select:focus { outline: none; border-color: var(--accent); }
+  textarea { min-height: 100px; resize: vertical; }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 16px; }
+  .card-title { font-weight: 600; margin-bottom: 12px; font-size: 15px; }
+
+  /* Job detail panel */
+  .job-detail { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-top: 14px; display: none; }
+  .job-detail.open { display: block; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .detail-item label { color: var(--muted); font-size: 11px; }
+  .detail-item p { margin-top: 4px; font-size: 13px; word-break: break-word; }
+
+  /* Alert */
+  .alert { padding: 12px 16px; border-radius: 7px; font-size: 13px; margin-bottom: 14px; display: none; }
+  .alert.show { display: block; }
+  .alert-success { background: rgba(34,197,94,.12); border: 1px solid rgba(34,197,94,.3); color: var(--green); }
+  .alert-error   { background: rgba(239,68,68,.12);  border: 1px solid rgba(239,68,68,.3); color: var(--red); }
+  .alert-info    { background: rgba(79,142,247,.12); border: 1px solid rgba(79,142,247,.3); color: var(--accent); }
+
+  /* Worker */
+  .task-input-wrap { display: flex; gap: 10px; margin-bottom: 14px; }
+  .task-input-wrap input { flex: 1; }
+  .task-result { background: var(--surface); border: 1px solid var(--border); border-radius: 7px; padding: 14px; font-size: 13px; white-space: pre-wrap; line-height: 1.6; margin-top: 10px; min-height: 80px; }
+
+  /* Loading */
+  .loader { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.2); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Score bar */
+  .score-bar { display: flex; align-items: center; gap: 8px; }
+  .score-track { flex: 1; height: 5px; background: var(--border); border-radius: 999px; overflow: hidden; max-width: 80px; }
+  .score-fill  { height: 100%; border-radius: 999px; background: var(--accent); }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty .icon { font-size: 40px; margin-bottom: 10px; }
+
+  .row-actions { display: flex; gap: 6px; }
+  .link { color: var(--accent); text-decoration: none; font-size: 12px; }
+  .link:hover { text-decoration: underline; }
+  .truncate { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* Inbox categories */
+  .inbox-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 10px; display: flex; gap: 14px; align-items: flex-start; }
+  .inbox-icon { font-size: 24px; flex-shrink: 0; }
+  .inbox-body h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .inbox-body p  { font-size: 12px; color: var(--muted); }
+
+  /* Task history */
+  .task-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; margin-bottom: 10px; }
+  .task-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+  .task-card pre { font-size: 12px; color: var(--text); white-space: pre-wrap; line-height: 1.5; background: var(--surface); padding: 10px; border-radius: 6px; }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 16px; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .detail-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="brand">
+    <h2>🤖 Job AI Agent</h2>
+    <p>Free Version — Powered by Groq</p>
+  </div>
+  <nav class="nav">
+    <div class="nav-item active" onclick="showTab('dashboard')">
+      <span class="icon">📊</span> Dashboard
+    </div>
+    <div class="nav-item" onclick="showTab('jobs')">
+      <span class="icon">💼</span> Job Listings
+      <span class="badge" id="badge-jobs">0</span>
+    </div>
+    <div class="nav-item" onclick="showTab('queue')">
+      <span class="icon">⚠️</span> Review Queue
+      <span class="badge" id="badge-queue">0</span>
+    </div>
+    <div class="nav-item" onclick="showTab('inbox')">
+      <span class="icon">📬</span> Inbox
+      <span class="badge" id="badge-inbox">0</span>
+    </div>
+    <div class="nav-item" onclick="showTab('worker')">
+      <span class="icon">🤖</span> Worker Agent
+    </div>
+    <div class="nav-item" onclick="showTab('add')">
+      <span class="icon">➕</span> Add Job
+    </div>
+  </nav>
+</aside>
+
+<!-- MAIN CONTENT -->
+<main class="main">
+
+  <!-- ── DASHBOARD TAB ── -->
+  <div id="tab-dashboard" class="tab active">
+    <div class="page-title">Dashboard</div>
+    <div class="page-sub">Overview of your automated job hunting activity.</div>
+
+    <div id="alert-dashboard" class="alert"></div>
+
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card blue">
+        <div class="stat-label">Jobs Found</div>
+        <div class="stat-value" id="s-total">—</div>
+      </div>
+      <div class="stat-card green">
+        <div class="stat-label">Applied</div>
+        <div class="stat-value" id="s-applied">—</div>
+      </div>
+      <div class="stat-card red">
+        <div class="stat-label">Scams Caught</div>
+        <div class="stat-value" id="s-scams">—</div>
+      </div>
+      <div class="stat-card yellow">
+        <div class="stat-label">Needs Review</div>
+        <div class="stat-value" id="s-review">—</div>
+      </div>
+      <div class="stat-card purple">
+        <div class="stat-label">Interviews 🎉</div>
+        <div class="stat-value" id="s-interviews">—</div>
+      </div>
+      <div class="stat-card blue">
+        <div class="stat-label">Email Replies</div>
+        <div class="stat-value" id="s-responses">—</div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-primary" onclick="startScrape()">
+        🔍 Scrape New Jobs
+      </button>
+      <button class="btn btn-ghost" onclick="loadStats()">
+        🔄 Refresh Stats
+      </button>
+    </div>
+
+    <div id="scrape-status" style="margin-top:14px; color: var(--muted); font-size:13px;"></div>
+  </div>
+
+  <!-- ── JOBS TAB ── -->
+  <div id="tab-jobs" class="tab">
+    <div class="page-title">Job Listings</div>
+    <div class="page-sub">All jobs found by the scraper with AI scores and decisions.</div>
+
+    <div class="toolbar">
+      <input type="text" class="search-input" placeholder="🔍 Search title or company…" id="jobs-search" oninput="filterJobs()">
+      <select class="filter-select" id="jobs-filter" onchange="filterJobs()">
+        <option value="">All Decisions</option>
+        <option value="AUTO_APPLY">Auto Apply</option>
+        <option value="ASK_USER">Needs Review</option>
+        <option value="IGNORE">Ignored</option>
+        <option value="REJECT">Rejected / Scam</option>
+      </select>
+      <select class="filter-select" id="status-filter" onchange="filterJobs()">
+        <option value="">All Statuses</option>
+        <option value="applied">Applied</option>
+        <option value="pending">Pending</option>
+        <option value="evaluated">Evaluated</option>
+        <option value="skipped">Skipped</option>
+      </select>
+      <button class="btn btn-ghost" onclick="loadJobs()">🔄 Refresh</button>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Company</th>
+            <th>Platform</th>
+            <th>Score</th>
+            <th>Decision</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="jobs-tbody">
+          <tr><td colspan="7"><div class="empty"><div class="icon">💼</div>No jobs loaded yet. Click Scrape New Jobs on the Dashboard.</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="job-detail-panel" class="job-detail">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+        <h3 id="detail-title" style="font-size:15px;"></h3>
+        <button class="btn btn-ghost" onclick="closeDetail()">✕ Close</button>
+      </div>
+      <div class="detail-grid">
+        <div class="detail-item"><label>Company</label><p id="detail-company"></p></div>
+        <div class="detail-item"><label>Platform</label><p id="detail-platform"></p></div>
+        <div class="detail-item"><label>AI Score</label><p id="detail-score"></p></div>
+        <div class="detail-item"><label>Scam Check</label><p id="detail-scam"></p></div>
+        <div class="detail-item"><label>Apply Email</label><p id="detail-email"></p></div>
+        <div class="detail-item"><label>Salary</label><p id="detail-salary"></p></div>
+      </div>
+      <div class="form-group">
+        <label>AI Reason</label>
+        <p id="detail-reason" style="font-size:13px; color: var(--muted);"></p>
+      </div>
+      <div class="form-group">
+        <label>Job Description</label>
+        <p id="detail-desc" style="font-size:12px; color: var(--muted); max-height:150px; overflow:auto; line-height:1.6;"></p>
+      </div>
+      <div id="detail-cover" style="display:none;" class="form-group">
+        <label>Cover Letter Sent</label>
+        <pre id="detail-cover-text" style="font-size:12px; background:var(--surface); padding:12px; border-radius:7px; white-space:pre-wrap; line-height:1.6;"></pre>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+        <button class="btn btn-success" id="btn-apply-detail" onclick="applyJob()">✉️ Apply Now</button>
+        <button class="btn btn-danger"  onclick="rejectJob()">✕ Skip</button>
+        <a id="detail-url" class="btn btn-ghost" target="_blank">🔗 View on Site</a>
+      </div>
+      <div id="detail-alert" class="alert" style="margin-top:10px;"></div>
+    </div>
+  </div>
+
+  <!-- ── QUEUE TAB ── -->
+  <div id="tab-queue" class="tab">
+    <div class="page-title">Review Queue</div>
+    <div class="page-sub">Jobs the AI scored 45–74 — good enough to consider, but needs your approval before sending.</div>
+
+    <div id="queue-alert" class="alert"></div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Company</th>
+            <th>Score</th>
+            <th>Apply Email</th>
+            <th>AI Reason</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="queue-tbody">
+          <tr><td colspan="6"><div class="empty"><div class="icon">⚠️</div>No jobs in the review queue.</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── INBOX TAB ── -->
+  <div id="tab-inbox" class="tab">
+    <div class="page-title">Inbox Responses</div>
+    <div class="page-sub">Job-related emails from your Gmail, automatically classified.</div>
+
+    <div style="display:flex; gap:10px; margin-bottom:18px;">
+      <button class="btn btn-primary" onclick="scanInbox()">📬 Scan Gmail Now</button>
+      <button class="btn btn-ghost" onclick="loadInbox()">🔄 Refresh</button>
+    </div>
+
+    <div id="inbox-alert" class="alert"></div>
+    <div id="inbox-list"></div>
+  </div>
+
+  <!-- ── WORKER TAB ── -->
+  <div id="tab-worker" class="tab">
+    <div class="page-title">Worker Agent</div>
+    <div class="page-sub">Your digital clone. Type any task in plain English — AI completes it using your background and writing style.</div>
+
+    <div class="card">
+      <div class="card-title">💬 New Task</div>
+      <div class="form-group">
+        <label>Task Description</label>
+        <textarea id="task-desc" placeholder="Examples:
+• Write a follow-up email to CargoBoss — I applied 5 days ago with no response
+• Summarize this job post and tell me if I should apply: [paste text here]
+• Draft a reply to this interview invitation: [paste email here]
+• List 5 interview questions to prepare for a virtual assistant role
+• Write a LinkedIn message to introduce myself to a hiring manager"></textarea>
+      </div>
+      <button class="btn btn-primary" onclick="runWorker()">🤖 Run Task</button>
+      <div id="worker-result" class="task-result" style="display:none;"></div>
+    </div>
+
+    <div id="task-history"></div>
+  </div>
+
+  <!-- ── ADD JOB TAB ── -->
+  <div id="tab-add" class="tab">
+    <div class="page-title">Add Job Manually</div>
+    <div class="page-sub">Found a job on Facebook, LinkedIn, or from a referral? Paste it here — AI evaluates it instantly.</div>
+
+    <div class="card">
+      <div id="add-alert" class="alert"></div>
+      <div class="detail-grid">
+        <div class="form-group">
+          <label>Job Title *</label>
+          <input type="text" id="add-title" placeholder="e.g. Virtual Assistant">
+        </div>
+        <div class="form-group">
+          <label>Company *</label>
+          <input type="text" id="add-company" placeholder="e.g. TechCorp Inc.">
+        </div>
+        <div class="form-group">
+          <label>Apply Email</label>
+          <input type="email" id="add-email" placeholder="hiring@company.com">
+        </div>
+        <div class="form-group">
+          <label>Salary Info</label>
+          <input type="text" id="add-salary" placeholder="e.g. $5/hr or ₱20,000/mo">
+        </div>
+        <div class="form-group">
+          <label>Job URL (optional)</label>
+          <input type="text" id="add-url" placeholder="https://...">
+        </div>
+        <div class="form-group">
+          <label>Platform</label>
+          <select id="add-platform">
+            <option value="Manual">Manual Entry</option>
+            <option value="Facebook">Facebook</option>
+            <option value="LinkedIn">LinkedIn</option>
+            <option value="Referral">Referral</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Job Description (paste the full post)</label>
+        <textarea id="add-desc" style="min-height:160px;" placeholder="Paste the full job description here for best AI evaluation…"></textarea>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-primary" onclick="addJob()">➕ Add & Evaluate</button>
+        <button class="btn btn-ghost" onclick="clearAddForm()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script>
+const API = '';
+let allJobs = [];
+let currentJobId = null;
+
+// ── Navigation ────────────────────────────────────────────
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  const items = document.querySelectorAll('.nav-item');
+  items.forEach(i => { if (i.getAttribute('onclick')?.includes(name)) i.classList.add('active'); });
+  if (name === 'jobs')    loadJobs();
+  if (name === 'queue')   loadQueue();
+  if (name === 'inbox')   loadInbox();
+  if (name === 'worker')  loadTaskHistory();
+}
+
+// ── Stats ─────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const r = await fetch(API + '/api/stats');
+    const s = await r.json();
+    document.getElementById('s-total').textContent      = s.total_found   || 0;
+    document.getElementById('s-applied').textContent    = s.applied       || 0;
+    document.getElementById('s-scams').textContent      = s.scams_caught  || 0;
+    document.getElementById('s-review').textContent     = s.needs_review  || 0;
+    document.getElementById('s-interviews').textContent = s.interviews    || 0;
+    document.getElementById('s-responses').textContent  = s.responses     || 0;
+    document.getElementById('badge-queue').textContent  = s.needs_review  || 0;
+    document.getElementById('badge-inbox').textContent  = s.responses     || 0;
+  } catch (e) {
+    showAlert('alert-dashboard', 'Could not load stats. Is the server running?', 'error');
+  }
+}
+
+async function startScrape() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span> Scraping…';
+  document.getElementById('scrape-status').textContent = '🔍 Scraping job sites in the background… this takes 1–3 minutes.';
+  try {
+    await fetch(API + '/api/scrape', { method: 'POST' });
+    document.getElementById('scrape-status').textContent = '✅ Scraping started! Refresh stats in a few minutes to see results.';
+    setTimeout(loadStats, 5000);
+  } catch(e) {
+    document.getElementById('scrape-status').textContent = '❌ Scrape failed. Make sure the server is running.';
+  }
+  btn.disabled = false;
+  btn.innerHTML = '🔍 Scrape New Jobs';
+}
+
+// ── Jobs ──────────────────────────────────────────────────
+async function loadJobs() {
+  try {
+    const r = await fetch(API + '/api/jobs?limit=500');
+    allJobs = await r.json();
+    document.getElementById('badge-jobs').textContent = allJobs.length;
+    renderJobs(allJobs);
+  } catch(e) {
+    document.querySelector('#jobs-tbody').innerHTML = '<tr><td colspan="7"><div class="empty"><div class="icon">⚠️</div>Failed to load jobs.</div></td></tr>';
+  }
+}
+
+function filterJobs() {
+  const q   = document.getElementById('jobs-search').value.toLowerCase();
+  const dec = document.getElementById('jobs-filter').value;
+  const sta = document.getElementById('status-filter').value;
+  const filtered = allJobs.filter(j => {
+    const match  = !q || j.title.toLowerCase().includes(q) || j.company.toLowerCase().includes(q);
+    const dMatch = !dec || j.ai_decision === dec;
+    const sMatch = !sta || j.status === sta;
+    return match && dMatch && sMatch;
+  });
+  renderJobs(filtered);
+}
+
+function renderJobs(jobs) {
+  const tbody = document.getElementById('jobs-tbody');
+  if (!jobs.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="icon">💼</div>No jobs match filters.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = jobs.map(j => `
+    <tr onclick="openDetail(${j.id})" style="cursor:pointer;">
+      <td><div class="truncate">${j.title}</div></td>
+      <td><div class="truncate" style="max-width:140px;">${j.company}</div></td>
+      <td><span style="font-size:12px; color:var(--muted);">${j.platform}</span></td>
+      <td>
+        <div class="score-bar">
+          <span style="font-size:12px; min-width:24px;">${j.ai_score || 0}</span>
+          <div class="score-track"><div class="score-fill" style="width:${j.ai_score||0}%; background:${scoreColor(j.ai_score||0)};"></div></div>
+        </div>
+      </td>
+      <td>${decisionPill(j.ai_decision)}</td>
+      <td>${statusPill(j.status)}</td>
+      <td>
+        <div class="row-actions" onclick="event.stopPropagation()">
+          ${j.apply_email && j.status !== 'applied' ? `<button class="btn btn-success" style="padding:4px 10px;font-size:11px;" onclick="quickApply(${j.id})">✉️</button>` : ''}
+          <button class="btn btn-danger" style="padding:4px 10px;font-size:11px;" onclick="quickReject(${j.id})">✕</button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function scoreColor(s) {
+  if (s >= 75) return 'var(--green)';
+  if (s >= 45) return 'var(--yellow)';
+  return 'var(--muted)';
+}
+
+function decisionPill(d) {
+  const map = {
+    AUTO_APPLY: '<span class="pill pill-green">AUTO APPLY</span>',
+    ASK_USER:   '<span class="pill pill-yellow">REVIEW</span>',
+    REJECT:     '<span class="pill pill-red">REJECT</span>',
+    IGNORE:     '<span class="pill pill-gray">IGNORE</span>',
+    PENDING:    '<span class="pill pill-blue">PENDING</span>',
+  };
+  return map[d] || `<span class="pill pill-gray">${d||'—'}</span>`;
+}
+
+function statusPill(s) {
+  const map = {
+    applied:            '<span class="pill pill-green">Applied</span>',
+    evaluated:          '<span class="pill pill-blue">Evaluated</span>',
+    pending:            '<span class="pill pill-gray">Pending</span>',
+    skipped:            '<span class="pill pill-gray">Skipped</span>',
+    awaiting_approval:  '<span class="pill pill-yellow">Awaiting</span>',
+    apply_failed:       '<span class="pill pill-red">Failed</span>',
+    manual_required:    '<span class="pill pill-purple">Manual</span>',
+  };
+  return map[s] || `<span class="pill pill-gray">${s||'—'}</span>`;
+}
+
+// ── Job Detail ────────────────────────────────────────────
+async function openDetail(id) {
+  currentJobId = id;
+  try {
+    const r = await fetch(API + '/api/jobs/' + id);
+    const j = await r.json();
+    document.getElementById('detail-title').textContent    = j.title;
+    document.getElementById('detail-company').textContent  = j.company;
+    document.getElementById('detail-platform').textContent = j.platform;
+    document.getElementById('detail-score').textContent    = `${j.ai_score || 0}/100`;
+    document.getElementById('detail-scam').innerHTML       = j.ai_scam === 'yes'
+      ? '<span class="pill pill-red">⚠️ Scam</span>'
+      : '<span class="pill pill-green">✓ Clean</span>';
+    document.getElementById('detail-email').textContent    = j.apply_email || 'Not found — apply manually';
+    document.getElementById('detail-salary').textContent   = j.salary_info || 'Not specified';
+    document.getElementById('detail-reason').textContent   = j.ai_reason || '—';
+    document.getElementById('detail-desc').textContent     = j.description || 'No description available.';
+    document.getElementById('detail-url').href             = j.url || '#';
+    const coverDiv = document.getElementById('detail-cover');
+    if (j.cover_letter) {
+      coverDiv.style.display = 'block';
+      document.getElementById('detail-cover-text').textContent = j.cover_letter;
+    } else {
+      coverDiv.style.display = 'none';
+    }
+    document.getElementById('btn-apply-detail').disabled = j.status === 'applied' || !j.apply_email;
+    const panel = document.getElementById('job-detail-panel');
+    panel.classList.add('open');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    clearAlert('detail-alert');
+  } catch(e) {}
+}
+
+function closeDetail() {
+  document.getElementById('job-detail-panel').classList.remove('open');
+  currentJobId = null;
+}
+
+async function applyJob() {
+  if (!currentJobId) return;
+  const btn = document.getElementById('btn-apply-detail');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span> Sending…';
+  try {
+    const r = await fetch(API + '/api/jobs/' + currentJobId + '/apply', { method: 'POST' });
+    const d = await r.json();
+    if (d.sent) {
+      showAlert('detail-alert', '✅ Application sent successfully!', 'success');
+      btn.innerHTML = '✅ Applied';
+      loadStats();
+    } else {
+      showAlert('detail-alert', '❌ ' + (d.error || 'Failed to send.'), 'error');
+      btn.disabled = false;
+      btn.innerHTML = '✉️ Apply Now';
+    }
+  } catch(e) {
+    showAlert('detail-alert', '❌ Error: ' + e.message, 'error');
+    btn.disabled = false;
+    btn.innerHTML = '✉️ Apply Now';
+  }
+}
+
+async function rejectJob() {
+  if (!currentJobId) return;
+  await fetch(API + '/api/jobs/' + currentJobId + '/reject', { method: 'POST' });
+  closeDetail();
+  loadJobs();
+}
+
+async function quickApply(id) {
+  try {
+    const r = await fetch(API + '/api/jobs/' + id + '/apply', { method: 'POST' });
+    const d = await r.json();
+    if (d.sent) { loadJobs(); loadStats(); }
+    else alert('Could not apply: ' + (d.error || 'Unknown error'));
+  } catch(e) {}
+}
+
+async function quickReject(id) {
+  await fetch(API + '/api/jobs/' + id + '/reject', { method: 'POST' });
+  loadJobs();
+}
+
+// ── Queue ─────────────────────────────────────────────────
+async function loadQueue() {
+  try {
+    const r    = await fetch(API + '/api/jobs?limit=500');
+    const jobs = await r.json();
+    const q    = jobs.filter(j => j.ai_decision === 'ASK_USER' && j.status === 'awaiting_approval');
+    document.getElementById('badge-queue').textContent = q.length;
+    const tbody = document.getElementById('queue-tbody');
+    if (!q.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty"><div class="icon">✅</div>Queue is empty — nothing needs your approval right now.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = q.map(j => `
+      <tr>
+        <td><div class="truncate">${j.title}</div></td>
+        <td><div class="truncate" style="max-width:120px;">${j.company}</div></td>
+        <td>
+          <div class="score-bar">
+            <span style="font-size:12px; min-width:24px;">${j.ai_score}</span>
+            <div class="score-track"><div class="score-fill" style="width:${j.ai_score}%; background:var(--yellow);"></div></div>
+          </div>
+        </td>
+        <td style="font-size:12px;">${j.apply_email || '<span style="color:var(--muted)">—</span>'}</td>
+        <td style="font-size:12px; color:var(--muted); max-width:200px;">${j.ai_reason || '—'}</td>
+        <td>
+          <div class="row-actions">
+            ${j.apply_email ? `<button class="btn btn-success" style="padding:5px 12px;font-size:12px;" onclick="quickApply(${j.id})">✉️ Apply</button>` : '<span style="color:var(--muted);font-size:12px;">No email</span>'}
+            <button class="btn btn-danger" style="padding:5px 12px;font-size:12px;" onclick="quickReject(${j.id})">✕ Skip</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+  } catch(e) {}
+}
+
+// ── Inbox ─────────────────────────────────────────────────
+async function loadInbox() {
+  try {
+    const r    = await fetch(API + '/api/inbox');
+    const msgs = await r.json();
+    document.getElementById('badge-inbox').textContent = msgs.length;
+    const list = document.getElementById('inbox-list');
+    if (!msgs.length) {
+      list.innerHTML = '<div class="empty"><div class="icon">📬</div>No responses yet. Click Scan Gmail Now to check your inbox.</div>';
+      return;
+    }
+    const iconMap = { interview: '🎉', assessment: '📝', rejected: '❌', followup: '📬', other: '📧' };
+    const colorMap = { interview: 'pill-green', assessment: 'pill-yellow', rejected: 'pill-red', followup: 'pill-blue', other: 'pill-gray' };
+    list.innerHTML = msgs.map(m => `
+      <div class="inbox-card">
+        <div class="inbox-icon">${iconMap[m.category] || '📧'}</div>
+        <div class="inbox-body">
+          <h4>${m.subject || '(no subject)'} <span class="pill ${colorMap[m.category]||'pill-gray'}" style="margin-left:8px;">${m.category}</span></h4>
+          <p>From: ${m.from_name || ''} &lt;${m.from_email || ''}&gt; · ${m.received_at?.slice(0,16) || ''}</p>
+          ${m.snippet ? `<p style="margin-top:6px; font-size:11px;">${m.snippet.slice(0,180)}…</p>` : ''}
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {}
+}
+
+async function scanInbox() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span> Scanning Gmail…';
+  showAlert('inbox-alert', 'Connecting to Gmail… this may take a few seconds.', 'info');
+  try {
+    const r = await fetch(API + '/api/inbox/scan', { method: 'POST' });
+    const d = await r.json();
+    clearAlert('inbox-alert');
+    if (d.scanned > 0) {
+      showAlert('inbox-alert', `✅ Found ${d.scanned} job-related email(s).`, 'success');
+    } else {
+      showAlert('inbox-alert', 'No new job-related emails found in the last 30 days.', 'info');
+    }
+    loadInbox();
+    loadStats();
+  } catch(e) {
+    showAlert('inbox-alert', '❌ Failed to scan Gmail. Check your GMAIL_APP_PASSWORD in .env and make sure IMAP is enabled.', 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '📬 Scan Gmail Now';
+}
+
+// ── Worker ────────────────────────────────────────────────
+async function runWorker() {
+  const desc = document.getElementById('task-desc').value.trim();
+  if (!desc) { alert('Please enter a task description.'); return; }
+  const btn    = event.target;
+  const result = document.getElementById('worker-result');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span> Working…';
+  result.style.display = 'block';
+  result.textContent   = '⏳ AI is working on your task…';
+  try {
+    // Add task then run it
+    const addR  = await fetch(API + '/api/tasks/add', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ description: desc })
+    });
+    const addD  = await addR.json();
+    const runR  = await fetch(API + '/api/tasks/' + addD.task_id + '/run', { method: 'POST' });
+    const runD  = await runR.json();
+    result.textContent = runD.result || '(no output)';
+    if (runD.flags) {
+      result.textContent += '\n\n⚠️ Needs your attention:\n' + runD.flags;
+    }
+    loadTaskHistory();
+  } catch(e) {
+    result.textContent = '❌ Error: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '🤖 Run Task';
+}
+
+async function loadTaskHistory() {
+  // Show completed tasks (not in the pending endpoint, so we pull from jobs list as a proxy)
+  // For now just show a note
+}
+
+// ── Add Job ───────────────────────────────────────────────
+async function addJob() {
+  const title   = document.getElementById('add-title').value.trim();
+  const company = document.getElementById('add-company').value.trim();
+  if (!title || !company) {
+    showAlert('add-alert', 'Title and Company are required.', 'error');
+    return;
+  }
+  const btn = event.target;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span> Adding…';
+  const payload = {
+    title,
+    company,
+    platform:    document.getElementById('add-platform').value,
+    url:         document.getElementById('add-url').value.trim(),
+    apply_email: document.getElementById('add-email').value.trim(),
+    description: document.getElementById('add-desc').value.trim(),
+    salary_info: document.getElementById('add-salary').value.trim(),
+  };
+  try {
+    const addR = await fetch(API + '/api/jobs/add', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload)
+    });
+    const addD = await addR.json();
+    if (!addD.added) {
+      showAlert('add-alert', 'This job already exists in the database.', 'error');
+      btn.disabled = false; btn.innerHTML = '➕ Add & Evaluate';
+      return;
+    }
+    showAlert('add-alert', '✅ Job added! Evaluating with AI…', 'success');
+    const evalR = await fetch(API + '/api/jobs/' + addD.job_id + '/evaluate', { method: 'POST' });
+    const evalD = await evalR.json();
+    const ev    = evalD.evaluation;
+    showAlert('add-alert',
+      `✅ Evaluated! Score: ${ev.score}/100 · Decision: ${ev.decision} · ${ev.reason}`,
+      ev.scam === 'yes' ? 'error' : 'success'
+    );
+    clearAddForm();
+    loadStats();
+  } catch(e) {
+    showAlert('add-alert', '❌ Error: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '➕ Add & Evaluate';
+}
+
+function clearAddForm() {
+  ['add-title','add-company','add-url','add-email','add-salary','add-desc'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  clearAlert('add-alert');
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function showAlert(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = `alert alert-${type} show`;
+  el.textContent = msg;
+}
+function clearAlert(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className = 'alert';
+  el.textContent = '';
+}
+
+// ── Init ──────────────────────────────────────────────────
+loadStats();
+</script>
+</body>
+</html>
