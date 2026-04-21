@@ -17,7 +17,7 @@
 >
 > The video shows: scraping job sites → AI scoring every listing → scam detection → personalized cover letter generation → auto-applying via email → inbox scanning → full dashboard walkthrough.
 
-
+*(Replace `YOUR_VIDEO_ID` in the links above with your actual YouTube video ID once uploaded)*
 
 ---
 
@@ -33,7 +33,7 @@
 | **BeautifulSoup** | Scrapes job platforms | **Free** |
 | **Total** | | **₱0/month** |
 
-> This is the free alternative to [job-bot](https://github.com/YOUR_USERNAME/job-bot), which uses the paid Claude AI API. The free version uses Groq's free tier (LLaMA 3) instead. Same features, zero cost.
+> This is the free alternative to [job-bot](https://github.com/jasper-0918/job-bot), which uses the paid Claude AI API. The free version uses Groq's free tier (LLaMA 3) instead. Same features, zero cost.
 
 ---
 
@@ -146,7 +146,7 @@ A full browser-based dashboard runs at `http://localhost:8000`:
 ### Step 1 — Download the project
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/job-ai-agent-free.git
+git clone https://github.com/jasper-0918/job-ai-agent-free.git
 cd job-ai-agent-free
 pip install -r requirements.txt
 ```
@@ -312,9 +312,9 @@ If you have repetitive tasks or workflows that need automation, I can build a cu
 
 I specialize in Python automation for small businesses and VAs — application pipelines, document sorting, inbox management, reporting, and more.
 
-👉 **[Connect on LinkedIn](https://www.linkedin.com/in/your-linkedin-profile)**
-📧 **your.email@gmail.com**
-🏅 **[View Certifications](https://www.credly.com/users/your-credly-username)**
+👉 **[Connect on LinkedIn](https://www.linkedin.com/in/jasper-john-paitan-11641337b)**
+📧 **jasper.paitan0918@gmail.com**
+🏅 **[View Certifications](https://www.credly.com/users/jasper-john-paitan)**
 
 ---
 
