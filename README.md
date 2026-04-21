@@ -17,7 +17,7 @@
 >
 > The video shows: scraping job sites → AI scoring every listing → scam detection → personalized cover letter generation → auto-applying via email → inbox scanning → full dashboard walkthrough.
 
-*(Replace `YOUR_VIDEO_ID` in the links above with your actual YouTube video ID once uploaded)*
+
 
 ---
 
