@@ -11,9 +11,9 @@
 
 ## 🎬 Watch It In Action
 
-[![Watch Demo on YouTube](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)
+[![Watch Demo on YouTube](https://img.shields.io/badge/▶%20Watch%20Demo-YouTube-FF0000?logo=youtube&logoColor=white)](https://www.youtube.com/watch?v=rQDsM1rlPCo)
 
-> **[▶️ Click here to watch the full demo](https://www.youtube.com/watch?v=YOUR_VIDEO_ID)**
+> **[▶️ Click here to watch the full demo](https://www.youtube.com/watch?v=rQDsM1rlPCo)**
 >
 > The video shows: scraping job sites → AI scoring every listing → scam detection → personalized cover letter generation → auto-applying via email → inbox scanning → full dashboard walkthrough.
 
