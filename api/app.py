@@ -109,6 +109,10 @@ def scan_inbox():
 def get_tasks():
     return db.get_pending_tasks()
 
+@app.get("/api/tasks/history")
+def task_history(limit: int = 20):
+    return db.get_completed_tasks(limit)
+
 @app.post("/api/tasks/add")
 def add_task(req: TaskReq):
     task_id = db.add_task(req.description)
@@ -131,12 +135,18 @@ def scrape(background_tasks: BackgroundTasks):
 
 def _scrape_and_evaluate():
     from agents.scraper import scrape_all
+    from agents.decision import evaluate_jobs_batch
     jobs = scrape_all()
+    new_jobs = []
     for job in jobs:
         job_id = db.add_job(job)
         if job_id:
-            ai = evaluate_job(job)
-            db.update_ai(job_id, ai)
+            new_jobs.append((job_id, job))
+    if not new_jobs:
+        return
+    evals = evaluate_jobs_batch([job for _, job in new_jobs])
+    for (job_id, _), ai in zip(new_jobs, evals):
+        db.update_ai(job_id, ai)
 
 # Serve frontend
 frontend = Path(__file__).parent.parent / "frontend"

@@ -5,14 +5,13 @@
 # ─────────────────────────────────────────────────────────
 
 import os
-import time
 import smtplib
 import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text      import MIMEText
 from email.mime.application import MIMEApplication
 from pathlib import Path
-from config import USER_PROFILE, DELAY_BETWEEN_APPLIES_SEC
+from config import USER_PROFILE
 
 log = logging.getLogger("apply")
 
@@ -86,8 +85,9 @@ def send_application(job: dict, cover_letter: str,
             server.send_message(msg)
 
         _increment()
-        log.info(f"  ✅ Sent → {job['apply_email']} | {job['title']}")
-        time.sleep(DELAY_BETWEEN_APPLIES_SEC)
+        log.info(f"  Sent -> {job['apply_email']} | {job['title']}")
+        # NOTE: pacing between bulk sends lives in the caller (main.cmd_apply),
+        # so a single dashboard-triggered send returns immediately.
         return {"sent": True, "error": None}
 
     except smtplib.SMTPAuthenticationError:

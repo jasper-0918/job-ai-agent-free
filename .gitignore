@@ -1,0 +1,17 @@
+# Secrets and personal data — never commit
+.env
+config_local.py
+
+# Runtime data
+job_agent.db
+logs/
+assets/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Session notes
+.learnings/
