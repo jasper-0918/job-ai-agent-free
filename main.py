@@ -17,6 +17,7 @@ import argparse
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 # Load .env before anything else
@@ -38,12 +39,13 @@ log = logging.getLogger("main")
 
 from db.database        import Database
 from agents.scraper     import scrape_all
-from agents.decision    import evaluate_job
+from agents.decision    import evaluate_jobs_batch
 from agents.cover_letter import generate_cover_letter
 from agents.apply       import send_application
 from agents.inbox       import scan_inbox
 from agents.worker      import process_queue
-from config             import MAX_AUTO_APPLIES_PER_DAY, SCORE_AUTO_APPLY
+from config             import (MAX_AUTO_APPLIES_PER_DAY, SCORE_AUTO_APPLY,
+                                DELAY_BETWEEN_APPLIES_SEC)
 
 
 def check_env() -> bool:
@@ -67,28 +69,27 @@ def cmd_scrape(db: Database) -> int:
     log.info("SCRAPING JOBS")
     log.info("=" * 50)
 
-    jobs      = scrape_all()
-    new_count = 0
+    jobs = scrape_all()
 
+    # Insert first, then evaluate all new jobs in batched concurrent calls
+    new_jobs = []
     for job in jobs:
         job_id = db.add_job(job)
-        if not job_id:
-            continue   # duplicate
+        if job_id:
+            new_jobs.append((job_id, job))
 
-        new_count += 1
-        log.info(f"  [{new_count}] Evaluating: {job['title'][:45]} @ {job['company'][:25]}")
+    if new_jobs:
+        log.info(f"  Evaluating {len(new_jobs)} new jobs (batched)...")
+        evals = evaluate_jobs_batch([job for _, job in new_jobs])
+        for (job_id, job), ai in zip(new_jobs, evals):
+            db.update_ai(job_id, ai)
+            log.info(f"  [{ai['decision']:>10}] score={ai['score']:<3} "
+                     f"{job['title'][:45]} @ {job['company'][:25]}")
+            if ai["reason"]:
+                log.info(f"              {ai['reason'][:70]}")
 
-        ai = evaluate_job(job)
-        db.update_ai(job_id, ai)
-
-        icon = {"AUTO_APPLY": "✅", "ASK_USER": "⚠️",
-                "REJECT": "❌", "IGNORE": "  "}.get(ai["decision"], "  ")
-        log.info(f"       {icon} {ai['decision']}  score={ai['score']}  scam={ai['scam']}")
-        if ai["reason"]:
-            log.info(f"          {ai['reason'][:70]}")
-
-    log.info(f"\n  Done. {new_count} new jobs added.")
-    return new_count
+    log.info(f"\n  Done. {len(new_jobs)} new jobs added.")
+    return len(new_jobs)
 
 
 def cmd_apply(db: Database) -> int:
@@ -114,6 +115,11 @@ def cmd_apply(db: Database) -> int:
             if applied >= MAX_AUTO_APPLIES_PER_DAY:
                 log.warning(f"  Daily limit ({MAX_AUTO_APPLIES_PER_DAY}) reached.")
                 break
+
+            # Pace bulk sends so Gmail doesn't flag the account
+            # (before each send after the first — no trailing wait)
+            if applied > 0:
+                time.sleep(DELAY_BETWEEN_APPLIES_SEC)
 
             log.info(f"  [AUTO] Applying: {job['title'][:40]}")
             cover  = generate_cover_letter(job)

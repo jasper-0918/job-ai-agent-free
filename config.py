@@ -4,6 +4,10 @@
 #  Edit the values below to match your info.
 #  The AI uses everything here to evaluate jobs
 #  and write your cover letters.
+#
+#  TIP: instead of editing this file, create config_local.py
+#  (gitignored) with the same variable names — it overrides
+#  everything here and keeps your personal data out of git.
 # ─────────────────────────────────────────────────────────
 
 USER_PROFILE = {
@@ -65,7 +69,15 @@ USER_PROFILE = {
 SCORE_AUTO_APPLY  = 75   # score >= this → bot applies automatically
 SCORE_ASK_USER    = 45   # score >= this → bot asks you first
 MAX_AUTO_APPLIES_PER_DAY = 10   # max emails sent per day (safety limit)
-DELAY_BETWEEN_APPLIES_SEC = 45  # wait between each email send
+DELAY_BETWEEN_APPLIES_SEC = 45  # wait between each email send (bulk mode)
+
+# ─────────────────────────────────────────────────────────
+#  EVALUATION PERFORMANCE
+#  Batched + concurrent Groq calls. Sized for the free tier:
+#  smaller batches parse more reliably, few workers avoid 429s.
+# ─────────────────────────────────────────────────────────
+EVAL_BATCH_SIZE  = 6   # jobs evaluated per LLM call
+EVAL_MAX_WORKERS = 3   # concurrent LLM calls
 
 # ─────────────────────────────────────────────────────────
 #  SCAM DETECTION KEYWORDS
@@ -106,3 +118,14 @@ SEARCH_KEYWORDS = [
 # ─────────────────────────────────────────────────────────
 GROQ_MODEL_FAST  = "llama-3.1-8b-instant"    # for cover letters (speed)
 GROQ_MODEL_SMART = "llama-3.3-70b-versatile"  # for job evaluation (accuracy)
+
+# ─────────────────────────────────────────────────────────
+#  LOCAL OVERRIDES (optional, recommended)
+#  Create config_local.py next to this file with any of the
+#  variables above (e.g. USER_PROFILE, SEARCH_KEYWORDS).
+#  It is gitignored, so your real profile never reaches git.
+# ─────────────────────────────────────────────────────────
+try:
+    from config_local import *   # noqa: F401,F403
+except ImportError:
+    pass

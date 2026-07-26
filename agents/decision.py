@@ -7,12 +7,15 @@
 import os
 import json
 import re
+import time
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from groq import Groq
 from config import (
     USER_PROFILE, SCAM_KEYWORDS,
     SCORE_AUTO_APPLY, SCORE_ASK_USER,
     GROQ_MODEL_SMART,
+    EVAL_BATCH_SIZE, EVAL_MAX_WORKERS,
 )
 
 log = logging.getLogger("decision")
@@ -151,6 +154,150 @@ reason: one sentence explaining your decision"""
     except Exception as e:
         log.error(f"Groq API error: {e}")
         return _fallback_score(job)
+
+
+# ── Batched evaluation (fast path) ───────────────────────
+
+def _normalize(data: dict) -> dict:
+    return {
+        "score":    max(0, min(100, int(data.get("score", 0)))),
+        "scam":     str(data.get("scam", "unknown")),
+        "decision": str(data.get("decision", "IGNORE")),
+        "reason":   str(data.get("reason", ""))[:200],
+    }
+
+
+def _candidate_block() -> str:
+    return (
+        f"Name: {USER_PROFILE['name']}\n"
+        f"Education: {USER_PROFILE['education']}\n"
+        f"Skills: {', '.join(USER_PROFILE['skills'])}\n"
+        f"Preferred roles: {', '.join(USER_PROFILE['preferred_roles'])}\n"
+        f"Minimum salary: ${USER_PROFILE['min_hourly_usd']}/hr "
+        f"or PHP {USER_PROFILE['min_monthly_php']}/month\n"
+        f"Experience: {'; '.join(USER_PROFILE['experience'])}"
+    )
+
+
+def _batch_prompt(chunk: list) -> str:
+    job_blocks = []
+    for n, job in enumerate(chunk, 1):
+        job_blocks.append(
+            f"JOB {n}:\n"
+            f"Title: {job.get('title', 'N/A')}\n"
+            f"Company: {job.get('company', 'Unknown')}\n"
+            f"Platform: {job.get('platform', 'N/A')}\n"
+            f"Salary: {job.get('salary_info', 'Not specified')}\n"
+            f"Apply email: {job.get('apply_email', 'None')}\n"
+            f"Description: {job.get('description', 'No description')[:400]}"
+        )
+    return f"""You are a job evaluator for a Filipino job seeker.
+
+CANDIDATE:
+{_candidate_block()}
+
+{chr(10).join(job_blocks)}
+
+SCAM RED FLAGS TO DETECT:
+- Requires payment to apply
+- Unrealistic salary for easy work
+- Only contact via Telegram or WhatsApp
+- No company name or website
+- MLM / network marketing
+- Vague description with no real tasks listed
+
+Evaluate EVERY job independently. Respond ONLY with a JSON array,
+one object per job in the same order, no extra text:
+[
+  {{"id": 1, "score": 72, "scam": "no", "decision": "ASK_USER", "reason": "one sentence"}},
+  {{"id": 2, ...}}
+]
+
+score: 0-100 (match to the candidate)
+scam: "yes" / "no" / "suspicious"
+decision: "AUTO_APPLY" / "ASK_USER" / "REJECT" / "IGNORE"
+The array must contain exactly {len(chunk)} objects."""
+
+
+def _extract_json_array(raw: str) -> list:
+    raw = re.sub(r"```json\s*", "", raw)
+    raw = re.sub(r"```\s*", "", raw)
+    match = re.search(r"\[.*\]", raw, re.DOTALL)
+    if not match:
+        raise json.JSONDecodeError("no JSON array found", raw, 0)
+    return json.loads(match.group(0))
+
+
+def _call_with_backoff(prompt: str, max_tokens: int, attempts: int = 3) -> str:
+    """One Groq call with retry on rate limits (free tier throttles)."""
+    client = _get_client()
+    for attempt in range(attempts):
+        try:
+            response = client.chat.completions.create(
+                model=GROQ_MODEL_SMART,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.2,
+                max_tokens=max_tokens,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            msg = str(e).lower()
+            retriable = "429" in msg or "rate limit" in msg or "rate_limit" in msg
+            if not retriable or attempt == attempts - 1:
+                raise
+            wait = 2 ** (attempt + 1)
+            log.warning(f"Rate limited, retrying in {wait}s...")
+            time.sleep(wait)
+
+
+def _evaluate_chunk(chunk: list) -> list:
+    """Evaluate one chunk of jobs in a single LLM call.
+    Falls back to per-job evaluation if the batch response is unusable."""
+    try:
+        raw = _call_with_backoff(_batch_prompt(chunk), max_tokens=120 * len(chunk))
+        items = _extract_json_array(raw)
+        if len(items) != len(chunk):
+            raise ValueError(f"expected {len(chunk)} results, got {len(items)}")
+        return [_normalize(item) for item in items]
+    except Exception as e:
+        log.warning(f"Batch of {len(chunk)} failed ({e}) — falling back to per-job")
+        return [evaluate_job(job) for job in chunk]
+
+
+def evaluate_jobs_batch(jobs: list) -> list:
+    """
+    Evaluate many jobs fast: local scam filter first, then batched
+    LLM calls (EVAL_BATCH_SIZE jobs per call) running concurrently
+    (EVAL_MAX_WORKERS calls in flight). Results align with input order.
+    """
+    if not jobs:
+        return []
+
+    results = [None] * len(jobs)
+    pending = []
+    for i, job in enumerate(jobs):
+        if quick_scam_check(job):
+            results[i] = {
+                "score": 0, "scam": "yes", "decision": "REJECT",
+                "reason": "Matched scam keyword filter.",
+            }
+        else:
+            pending.append(i)
+
+    chunks = [pending[i:i + EVAL_BATCH_SIZE]
+              for i in range(0, len(pending), EVAL_BATCH_SIZE)]
+    if chunks:
+        log.info(f"Evaluating {len(pending)} jobs in {len(chunks)} batched calls "
+                 f"({EVAL_MAX_WORKERS} concurrent)")
+        with ThreadPoolExecutor(max_workers=EVAL_MAX_WORKERS) as pool:
+            for idx_chunk, evals in zip(
+                chunks,
+                pool.map(lambda c: _evaluate_chunk([jobs[i] for i in c]), chunks),
+            ):
+                for i, ev in zip(idx_chunk, evals):
+                    results[i] = ev
+
+    return results
 
 
 def _fallback_score(job: dict) -> dict:

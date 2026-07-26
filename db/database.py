@@ -57,6 +57,11 @@ class Database:
                 created_at   TEXT NOT NULL,
                 completed_at TEXT
             );
+
+            CREATE INDEX IF NOT EXISTS idx_jobs_status    ON jobs(status);
+            CREATE INDEX IF NOT EXISTS idx_jobs_decision  ON jobs(ai_decision);
+            CREATE INDEX IF NOT EXISTS idx_responses_dedup
+                ON responses(from_email, subject, received_at);
         """)
         self.conn.commit()
 
@@ -134,17 +139,27 @@ class Database:
 
     # ── Responses ─────────────────────────────────────────
 
-    def log_response(self, r: dict):
+    def log_response(self, r: dict) -> bool:
+        """Insert a classified email. Rescans cover the same 30-day
+        window, so an identical (sender, subject, date) is skipped.
+        Returns True if a new row was inserted."""
+        received = r.get("received_at", datetime.utcnow().isoformat())
+        exists = self.conn.execute(
+            "SELECT 1 FROM responses WHERE from_email=? AND subject=? AND received_at=?",
+            (r.get("from_email"), r.get("subject"), received)
+        ).fetchone()
+        if exists:
+            return False
         self.conn.execute("""
             INSERT INTO responses
                 (from_email, from_name, subject, category, snippet, received_at)
             VALUES (?,?,?,?,?,?)
         """, (
             r.get("from_email"), r.get("from_name"), r.get("subject"),
-            r.get("category"), r.get("snippet"),
-            r.get("received_at", datetime.utcnow().isoformat())
+            r.get("category"), r.get("snippet"), received,
         ))
         self.conn.commit()
+        return True
 
     def get_responses(self) -> list:
         rows = self.conn.execute(
@@ -172,6 +187,13 @@ class Database:
     def get_pending_tasks(self) -> list:
         rows = self.conn.execute(
             "SELECT * FROM tasks WHERE status='pending' ORDER BY created_at"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_completed_tasks(self, limit: int = 20) -> list:
+        rows = self.conn.execute(
+            "SELECT * FROM tasks WHERE status='done' "
+            "ORDER BY completed_at DESC LIMIT ?", (limit,)
         ).fetchall()
         return [dict(r) for r in rows]
 

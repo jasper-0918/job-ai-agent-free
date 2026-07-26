@@ -13,7 +13,10 @@
 import re
 import time
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import quote_plus
+
+import requests
 
 from config import SEARCH_KEYWORDS
 
@@ -205,111 +208,130 @@ def scrape_onlinejobs(keyword: str, context) -> list:
 _remotive_cache: dict = {}
 REMOTIVE_CATEGORIES = ["customer-support", "data", "software-dev", "all-other"]
 
-def scrape_remotive() -> list:
-    import requests
-    TARGET_KEYWORDS = [
-        "virtual assistant", "customer service", "data entry",
-        "support", "python", "automation", "non voice",
-    ]
-    jobs = []
-    fetched = set()
-    for cat in REMOTIVE_CATEGORIES:
-        if cat in _remotive_cache:
-            jobs += _remotive_cache.get(cat, [])
-            continue
-        try:
-            r = requests.get(
-                f"https://remotive.com/api/remote-jobs?category={cat}&limit=30",
-                headers={"User-Agent": "JobAIAgent/1.0"},
-                timeout=12,
-            )
-            if r.status_code != 200:
+REMOTIVE_TARGET_KEYWORDS = [
+    "python", "automation", "ai", "machine learning", "backend",
+    "developer", "engineer", "integration", "data",
+]
+
+def _fetch_remotive_category(cat: str) -> list:
+    """Fetch and filter one Remotive category. Safe to run in a thread."""
+    if cat in _remotive_cache:
+        return _remotive_cache[cat]
+    batch = []
+    try:
+        r = requests.get(
+            f"https://remotive.com/api/remote-jobs?category={cat}&limit=30",
+            headers={"User-Agent": "JobAIAgent/1.0"},
+            timeout=12,
+        )
+        if r.status_code != 200:
+            return []
+        for j in r.json().get("jobs", []):
+            title_raw = j.get("title", "")
+            tags = " ".join(j.get("tags", []))
+            desc_raw = re.sub(r"<[^>]+>", " ", j.get("description", ""))[:600]
+            combo = (title_raw + " " + tags).lower()
+            if not any(kw in combo for kw in REMOTIVE_TARGET_KEYWORDS):
                 continue
-            batch = []
-            for j in r.json().get("jobs", []):
-                jid = str(j.get("id", ""))
-                if jid in fetched:
-                    continue
-                fetched.add(jid)
-                title_raw = j.get("title", "")
-                tags = " ".join(j.get("tags", []))
-                desc_raw = re.sub(r"<[^>]+>", " ", j.get("description", ""))[:600]
-                combo = (title_raw + " " + tags).lower()
-                if not any(kw in combo for kw in TARGET_KEYWORDS):
-                    continue
-                batch.append({
-                    "title": title_raw,
-                    "company": j.get("company_name", "Unknown"),
-                    "platform": "Remotive.com",
-                    "url": j.get("url", ""),
-                    "apply_email": _extract_email(desc_raw),
-                    "description": desc_raw,
-                    "salary_info": j.get("salary", "") or "",
-                    "keywords_matched": _matched_keywords(title_raw + " " + tags),
-                })
-            _remotive_cache[cat] = batch
+            batch.append({
+                "title": title_raw,
+                "company": j.get("company_name", "Unknown"),
+                "platform": "Remotive.com",
+                "url": j.get("url", ""),
+                "apply_email": _extract_email(desc_raw),
+                "description": desc_raw,
+                "salary_info": j.get("salary", "") or "",
+                "keywords_matched": _matched_keywords(title_raw + " " + tags),
+            })
+        _remotive_cache[cat] = batch
+        log.info(f"    Remotive [{cat}]: {len(batch)} relevant jobs")
+    except Exception as e:
+        log.warning(f"    Remotive [{cat}] failed: {e}")
+    return batch
+
+
+def scrape_remotive() -> list:
+    """All Remotive categories fetched concurrently.
+    Cross-category duplicates are removed by scrape_all's global dedup."""
+    jobs = []
+    with ThreadPoolExecutor(max_workers=len(REMOTIVE_CATEGORIES)) as pool:
+        for batch in pool.map(_fetch_remotive_category, REMOTIVE_CATEGORIES):
             jobs += batch
-            log.info(f"    Remotive [{cat}]: {len(batch)} relevant jobs")
-        except Exception as e:
-            log.warning(f"    Remotive [{cat}] failed: {e}")
+    return jobs
+
+
+def _scrape_site(site_name: str, scrape_fn) -> list:
+    """
+    Run every keyword against one site inside its own Playwright
+    instance. Each site gets a dedicated thread, so keywords stay
+    sequential per domain (polite) while the three sites overlap.
+    Playwright sync objects are not thread-safe, so nothing here is
+    shared across threads.
+    """
+    jobs = []
+    pw = browser = context = None
+    try:
+        pw, browser, context = _make_browser()
+    except Exception as e:
+        log.error(f"  [{site_name}] browser launch failed: {e}")
+        log.error("   Fix: run  python -m playwright install chromium")
+        return jobs
+
+    try:
+        for i, keyword in enumerate(SEARCH_KEYWORDS, 1):
+            log.info(f"  [{site_name} {i}/{len(SEARCH_KEYWORDS)}] '{keyword}'")
+            try:
+                jobs += scrape_fn(keyword, context)
+            except Exception as e:
+                log.warning(f"  [{site_name}] '{keyword[:30]}' failed: {e}")
+    finally:
+        for obj in (context, browser):
+            try:
+                if obj:
+                    obj.close()
+            except Exception:
+                pass
+        try:
+            if pw:
+                pw.stop()
+        except Exception:
+            pass
     return jobs
 
 
 def scrape_all() -> list:
+    """All three browser sites + the Remotive API scraped concurrently.
+    Wall time is the slowest single site instead of the sum of all four."""
+    sites = [
+        ("Indeed",     scrape_indeed),
+        ("Jobstreet",  scrape_jobstreet),
+        ("OnlineJobs", scrape_onlinejobs),
+    ]
+    log.info(f"Starting scrape — {len(SEARCH_KEYWORDS)} keywords, "
+             f"{len(sites)} sites in parallel + Remotive API")
+
     all_jobs = []
     seen = set()
-
-    log.info(f"Starting scrape — {len(SEARCH_KEYWORDS)} keywords across 3 sites + Remotive API")
-
-    pw = browser = context = None
-    playwright_ok = False
-    try:
-        pw, browser, context = _make_browser()
-        playwright_ok = True
-        log.info("✅ Stealth browser launched")
-    except Exception as e:
-        log.error(f"❌ Browser launch failed: {e}")
-        log.error("   Fix: run  python -m playwright install chromium")
-
-    if playwright_ok:
-        for i, keyword in enumerate(SEARCH_KEYWORDS, 1):
-            log.info(f"  [{i}/{len(SEARCH_KEYWORDS)}] '{keyword}'")
-            batch = (
-                scrape_indeed(keyword, context) +
-                scrape_jobstreet(keyword, context) +
-                scrape_onlinejobs(keyword, context)
-            )
-            added = 0
+    with ThreadPoolExecutor(max_workers=len(sites) + 1) as pool:
+        futures = [pool.submit(_scrape_site, name, fn) for name, fn in sites]
+        futures.append(pool.submit(scrape_remotive))
+        for fut in futures:
+            try:
+                batch = fut.result()
+            except Exception as e:
+                log.warning(f"  Scrape worker crashed: {e}")
+                continue
             for job in batch:
                 uid = f"{job['title'].lower().strip()}|{job['company'].lower().strip()}"
                 if uid not in seen and job["title"].strip():
                     seen.add(uid)
                     all_jobs.append(job)
-                    added += 1
-            log.info(f"    → {added} new unique jobs")
 
-    log.info("  Fetching Remotive.com API...")
-    for job in scrape_remotive():
-        uid = f"{job['title'].lower().strip()}|{job['company'].lower().strip()}"
-        if uid not in seen and job["title"].strip():
-            seen.add(uid)
-            all_jobs.append(job)
-
-    for obj in [context, browser]:
-        try:
-            if obj: obj.close()
-        except Exception:
-            pass
-    try:
-        if pw: pw.stop()
-    except Exception:
-        pass
-
-    log.info(f"✅ Scrape complete — {len(all_jobs)} unique jobs total")
+    log.info(f"Scrape complete — {len(all_jobs)} unique jobs total")
 
     if not all_jobs:
         log.warning(
-            "\n⚠️  Zero jobs collected. Troubleshoot:\n"
+            "\nZero jobs collected. Troubleshoot:\n"
             "   1. Run: python -m playwright install chromium\n"
             "   2. Check your internet connection\n"
             "   3. Use 'Add Job Manually' in the dashboard as a workaround\n"
